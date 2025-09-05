@@ -1,6 +1,6 @@
 # tests/test_ncon.py
 """
-Comprehensive pytest suite for a PyTorch ncon implementation.
+Comprehensive pytest suite for a PyTorch ncon_numpy implementation.
 
 Coverage highlights
 -------------------
@@ -19,8 +19,7 @@ Coverage highlights
 import pytest
 import torch
 
-# Change this import to your actual module path/name
-from .ncon_torch import ncon
+from .ncon_torch import ncon_torch
 
 
 @pytest.fixture(autouse=True)
@@ -37,7 +36,7 @@ def test_matmul_basic():
     A = torch.randn(m, k)
     B = torch.randn(k, n)
     # A: [-1, 1], B: [1, -2]  =>  A @ B
-    C = ncon([A, B], [[-1, 1], [1, -2]])
+    C = ncon_torch([A, B], [[-1, 1], [1, -2]])
     torch.testing.assert_close(C, A @ B)
 
 
@@ -47,7 +46,7 @@ def test_three_tensor_chain():
     A = torch.randn(i, a)
     B = torch.randn(a, b)
     C = torch.randn(b, j)
-    out = ncon([A, B, C], [[-1, 1], [1, 2], [2, -2]])
+    out = ncon_torch([A, B, C], [[-1, 1], [1, 2], [2, -2]])
     ref = torch.einsum("ia,ab,bj->ij", A, B, C)
     torch.testing.assert_close(out, ref)
 
@@ -57,7 +56,7 @@ def test_three_tensor_chain():
 # ---------------------------
 def test_negative_label_ordering_permutation():
     X = torch.randn(2, 3, 4)  # labels: [-3, -1, -2] -> output axes should be (-1, -2, -3)
-    Y = ncon([X], [[-3, -1, -2]])
+    Y = ncon_torch([X], [[-3, -1, -2]])
     # Expected permutation to (-1, -2, -3) corresponds to original indices (1, 2, 0)
     ref = X.permute(1, 2, 0)
     torch.testing.assert_close(Y, ref)
@@ -65,8 +64,8 @@ def test_negative_label_ordering_permutation():
 
 def test_make_contiguous_output_flag():
     X = torch.randn(2, 3, 4)
-    Y1 = ncon([X], [[-3, -1, -2]], make_contiguous_output=False)
-    Y2 = ncon([X], [[-3, -1, -2]], make_contiguous_output=True)
+    Y1 = ncon_torch([X], [[-3, -1, -2]], make_contiguous_output=False)
+    Y2 = ncon_torch([X], [[-3, -1, -2]], make_contiguous_output=True)
     assert Y2.is_contiguous()
     if not Y1.is_contiguous():
         assert not Y1.is_contiguous()
@@ -79,7 +78,7 @@ def test_partial_trace_vector():
     d, k = 6, 5
     A = torch.randn(d, d, k)
     # labels [1,1,-1] -> trace over first two dims, keep the last
-    out = ncon([A], [[1, 1, -1]])
+    out = ncon_torch([A], [[1, 1, -1]])
     ref = torch.einsum("iik->k", A)
     torch.testing.assert_close(out, ref)
 
@@ -87,7 +86,7 @@ def test_partial_trace_vector():
 def test_partial_trace_scalar():
     d = 7
     A = torch.randn(d, d)
-    out = ncon([A], [[1, 1]])
+    out = ncon_torch([A], [[1, 1]])
     # Should be scalar equal to trace(A)
     ref = torch.trace(A)
     assert out.ndim == 0
@@ -98,14 +97,14 @@ def test_partial_trace_dim_mismatch_raises():
     A = torch.randn(2, 3)
     # Fails in _check_inputs first
     with pytest.raises(ValueError, match=r"tensor dimension mismatch on index labelled 1"):
-        _ = ncon([A], [[1, 1]])
+        _ = ncon_torch([A], [[1, 1]])
 
 
 def test_partial_trace_label_appears_more_than_twice_on_same_tensor_raises():
     A = torch.randn(2, 2, 2)
     # Fails in _check_inputs first
     with pytest.raises(ValueError, match=r"more than two indices labelled 1"):
-        _ = ncon([A], [[1, 1, 1]])
+        _ = ncon_torch([A], [[1, 1, 1]])
 
 
 # ---------------------------
@@ -116,7 +115,7 @@ def test_outer_product_vectors():
     x = torch.randn(a)
     y = torch.randn(b)
     # x: [-1], y: [-2] -> outer product
-    out = ncon([x, y], [[-1], [-2]])
+    out = ncon_torch([x, y], [[-1], [-2]])
     ref = torch.outer(x, y)
     torch.testing.assert_close(out, ref)
 
@@ -125,7 +124,7 @@ def test_outer_product_scalars():
     # Two scalars -> still scalar (product)
     x = torch.randn(())
     y = torch.randn(())
-    out = ncon([x, y], [[], []])
+    out = ncon_torch([x, y], [[], []])
     ref = (x * y).reshape(())
     assert out.ndim == 0
     torch.testing.assert_close(out, ref)
@@ -139,7 +138,7 @@ def test_full_contraction_scalar():
     A = torch.randn(i, j)
     B = torch.randn(i, j)
     # labels: [1,2], [1,2] -> sum_ij A_ij * B_ij
-    out = ncon([A, B], [[1, 2], [1, 2]])
+    out = ncon_torch([A, B], [[1, 2], [1, 2]])
     ref = (A * B).sum().reshape(())
     assert out.ndim == 0
     torch.testing.assert_close(out, ref)
@@ -154,8 +153,8 @@ def test_custom_contraction_order_equivalence():
     B = torch.randn(a, b)
     C = torch.randn(b, j)
     # Positive labels are {1,2}; default [1,2]; test reversed [2,1]
-    out_default = ncon([A, B, C], [[-1, 1], [1, 2], [2, -2]], con_order=None)
-    out_reverse = ncon([A, B, C], [[-1, 1], [1, 2], [2, -2]], con_order=[2, 1])
+    out_default = ncon_torch([A, B, C], [[-1, 1], [1, 2], [2, -2]], con_order=None)
+    out_reverse = ncon_torch([A, B, C], [[-1, 1], [1, 2], [2, -2]], con_order=[2, 1])
     torch.testing.assert_close(out_default, out_reverse)
 
 
@@ -164,7 +163,7 @@ def test_invalid_contraction_order_string_raises():
     B = torch.randn(2, 2)
     # Passing a string order should raise when check_network=True
     with pytest.raises(ValueError, match="invalid contraction order"):
-        _ = ncon([A, B], [[-1, 1], [1, -2]], con_order="greedy", check_network=True)
+        _ = ncon_torch([A, B], [[-1, 1], [1, -2]], con_order="greedy", check_network=True)
 
 
 def test_contraction_order_missing_label_raises():
@@ -172,7 +171,7 @@ def test_contraction_order_missing_label_raises():
     B = torch.randn(3, 4)
     # Positive labels are {1}; providing [] should raise
     with pytest.raises(ValueError, match="invalid contraction order"):
-        _ = ncon([A, B], [[-1, 1], [1, -2]], con_order=[], check_network=True)
+        _ = ncon_torch([A, B], [[-1, 1], [1, -2]], con_order=[], check_network=True)
 
 
 # ---------------------------
@@ -182,13 +181,13 @@ def test_rank_label_mismatch_raises():
     A = torch.randn(2, 2)
     # Label list length != tensor rank
     with pytest.raises(ValueError, match="number of indices does not match number of labels"):
-        _ = ncon([A], [[-1, 1, 2]])
+        _ = ncon_torch([A], [[-1, 1, 2]])
 
 
 def test_negative_label_duplicates_raises():
     A = torch.randn(2, 2)
     with pytest.raises(ValueError, match="more than one index labelled -1"):
-        _ = ncon([A], [[-1, -1]])
+        _ = ncon_torch([A], [[-1, -1]])
 
 
 def test_negative_label_gap_raises():
@@ -196,14 +195,14 @@ def test_negative_label_gap_raises():
     A = torch.randn(3)
     B = torch.randn(4)
     with pytest.raises(ValueError, match="no index labelled -2"):
-        _ = ncon([A, B], [[-1], [-3]])
+        _ = ncon_torch([A, B], [[-1], [-3]])
 
 
 def test_positive_label_only_once_raises():
     A = torch.randn(5)
     B = torch.randn(6)
     with pytest.raises(ValueError, match="only one index labelled 1"):
-        _ = ncon([A, B], [[1], [-1]])
+        _ = ncon_torch([A, B], [[1], [-1]])
 
 
 def test_positive_label_more_than_twice_raises():
@@ -211,7 +210,7 @@ def test_positive_label_more_than_twice_raises():
     b = torch.randn(3)
     c = torch.randn(3)
     with pytest.raises(ValueError, match="more than two indices labelled 1"):
-        _ = ncon([a, b, c], [[1], [1], [1]])
+        _ = ncon_torch([a, b, c], [[1], [1], [1]])
 
 
 def test_positive_label_dim_mismatch_raises():
@@ -219,7 +218,7 @@ def test_positive_label_dim_mismatch_raises():
     B = torch.randn(4, 5)
     # Connect A dim-0 (size 2) with B dim-0 (size 4) on label 1 -> mismatch
     with pytest.raises(ValueError, match="tensor dimension mismatch on index labelled 1"):
-        _ = ncon([A, B], [[1, -1], [1, -2]])
+        _ = ncon_torch([A, B], [[1, -1], [1, -2]])
 
 
 # ---------------------------
@@ -229,18 +228,18 @@ def test_positive_label_dim_mismatch_raises():
 def test_dtype_preservation(dtype):
     A = torch.randn(4, 6, dtype=dtype)
     B = torch.randn(6, 3, dtype=dtype)
-    out = ncon([A, B], [[-1, 1], [1, -2]])
+    out = ncon_torch([A, B], [[-1, 1], [1, -2]])
     assert out.dtype == dtype
 
 
 # ---------------------------
-# Autograd: gradients flow through ncon
+# Autograd: gradients flow through ncon_torch
 # ---------------------------
 def test_autograd_basic_matmul_sum():
     m, k, n = 4, 5, 6
     A = torch.randn(m, k, requires_grad=True)
     B = torch.randn(k, n, requires_grad=True)
-    out = ncon([A, B], [[-1, 1], [1, -2]]).sum()
+    out = ncon_torch([A, B], [[-1, 1], [1, -2]]).sum()
     out.backward()
 
     A2 = A.detach().clone().requires_grad_(True)
@@ -255,7 +254,7 @@ def test_autograd_basic_matmul_sum():
 def test_autograd_with_partial_trace():
     d, k = 4, 3
     A = torch.randn(d, d, k, requires_grad=True)
-    y = ncon([A], [[1, 1, -1]]).sum()
+    y = ncon_torch([A], [[1, 1, -1]]).sum()
     y.backward()
 
     A2 = A.detach().clone().requires_grad_(True)
@@ -275,8 +274,8 @@ def test_mixed_contractions_and_outer_products():
     B = torch.randn(k, n)
     v = torch.randn(5)
 
-    part = ncon([A, B], [[-1, 1], [1, -2]])  # shape (i, n)
-    out = ncon([A, B, v], [[-1, 1], [1, -2], [-3]])
+    part = ncon_torch([A, B], [[-1, 1], [1, -2]])  # shape (i, n)
+    out = ncon_torch([A, B, v], [[-1, 1], [1, -2], [-3]])
     ref = torch.einsum("in,m->inm", part, v)
     torch.testing.assert_close(out, ref)
 
@@ -287,7 +286,7 @@ def test_mixed_contractions_and_outer_products():
 def test_scalar_network_mixed_with_tensor():
     s = torch.randn(())
     M = torch.randn(2, 3)
-    out = ncon([s, M], [[], [-1, -2]])
+    out = ncon_torch([s, M], [[], [-1, -2]])
     ref = (s * M).contiguous()
     torch.testing.assert_close(out, ref)
 
@@ -295,7 +294,7 @@ def test_scalar_network_mixed_with_tensor():
 def test_unit_dims_behavior():
     A = torch.randn(1, 4)
     B = torch.randn(4, 1)
-    out = ncon([A, B], [[-1, 1], [1, -2]])
+    out = ncon_torch([A, B], [[-1, 1], [1, -2]])
     ref = A @ B
     torch.testing.assert_close(out, ref)
 
@@ -308,6 +307,6 @@ def test_complex_pattern_against_einsum():
     T1 = torch.randn(p, q, r)
     T2 = torch.randn(q, s)
     T3 = torch.randn(r, t, u)
-    out = ncon([T1, T2, T3], [[-1, 1, 2], [1, -2], [2, -3, -4]])
+    out = ncon_torch([T1, T2, T3], [[-1, 1, 2], [1, -2], [2, -3, -4]])
     ref = torch.einsum("pqr,qs,rtu->pstu", T1, T2, T3)
     torch.testing.assert_close(out, ref)
