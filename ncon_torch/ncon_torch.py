@@ -2,7 +2,7 @@ from typing import List, Union, Tuple, Optional
 import math
 import torch
 
-def ncon(
+def ncon_torch(
         tensors: List[torch.Tensor],
         connects: List[Union[List[int], Tuple[int]]],
         con_order: Optional[Union[List[int], str]] = None,
@@ -11,13 +11,13 @@ def ncon(
 ):
     """Contract a tensor network (PyTorch backend).
 
-    This is a faithful PyTorch rewrite of the NumPy-based `ncon` algorithm:
+    This is a faithful PyTorch rewrite of the `ncon` (arXiv:1402.0939) algorithm:
     it contracts a list of tensors according to index labels, performing
     (N-1) binary contractions and any necessary partial traces. Positive
     labels denote *internal* (contracted) indices and negative labels denote
     *free* (open/output) indices. The final tensor is permuted so that free
     indices appear in descending order of their (negative) labels
-    `-1, -2, -3, ...`, matching the original `ncon` convention.
+    `-1, -2, -3, ...`.
 
     Args:
       tensors: List of tensors comprising the network. Each `tensors[i]`
@@ -28,11 +28,10 @@ def ncon(
         (unless eliminated by a same-tensor partial trace). Negative labels
         (<0) appear at most once and determine the order of output axes.
       con_order: Optional contraction order for positive labels. If `None`,
-        the order defaults to the ascending positive labels (i.e., `sorted(set)`)
-        which reproduces the standard `ncon` default. If a list is provided,
-        it must contain each positive label exactly once. Supplying a string
-        is reserved for higher-level "greedy"/"full" planners and is not
-        interpreted here; with `check_network=True` this will raise an
+        the order defaults to the ascending positive labels (i.e., `sorted(set)`).
+        If a list is provided,it must contain each positive label exactly once.
+        Supplying a string is reserved for higher-level "greedy"/"full" planners
+        and is not interpreted here; with `check_network=True` this will raise an
         "invalid contraction order" error.
       check_network: If `True`, run consistency checks on the input network
         (label multiplicities, dimensionality matches, validity of
@@ -63,7 +62,7 @@ def ncon(
     Example:
       >>> A = torch.randn(5, 7)
       >>> B = torch.randn(7, 3)
-      >>> C = ncon([A, B], [[-1, 1], [1, -2]])  # matrix multiply A @ B
+      >>> C = ncon_torch([A, B], [[-1, 1], [1, -2]])  # matrix multiply A @ B
       >>> C.shape
       torch.Size([5, 3])
     """
@@ -76,7 +75,7 @@ def ncon(
 
     # Derive contraction order for positive labels when not provided.
     if con_order is None:
-        # Default: ascending order of unique positive labels (classic ncon).
+        # Default: ascending order of unique positive labels.
         con_order_list = sorted(set(x for x in flat_connect if x > 0))
     else:
         # Only list of integers is supported here. A string (e.g., "greedy")
@@ -271,9 +270,9 @@ def _check_inputs(
     dims_list: List[List[int]],
     con_order_list: List[int],
 ):
-    """Validate network structure against `ncon` invariants.
+    """Validate network structure against `ncon_torch` invariants.
 
-    This mirrors the checks in the original NumPy implementation. It verifies:
+    It verifies:
       * rank/label list length matches for each tensor,
       * negative labels are unique and contiguous (-1, -2, ...),
       * `con_order_list` equals the set of all positive labels,

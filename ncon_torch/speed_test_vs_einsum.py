@@ -7,10 +7,7 @@ from typing import List, Tuple, Dict, Any
 
 import torch
 
-# ============================================================
-# Try to import your ncon implementation
-# ============================================================
-from ncon_torch import ncon
+from ncon_torch import ncon_torch
 
 # ===========================================================
 # Utilities
@@ -20,8 +17,8 @@ LETTERS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
 def make_label_dims(connects: List[List[int]],
-                    dim_low: int = 8,
-                    dim_high: int = 64,
+                    dim_low: int = 32,
+                    dim_high: int = 128,
                     rng: random.Random = random.Random(0)) -> Dict[int, int]:
     """Assign a dimension size to each (positive/negative) label appearing in `connects`.
 
@@ -60,7 +57,7 @@ def build_tensors(connects: List[List[int]],
 
 
 def ncon_to_einsum(connects: List[List[int]]) -> Tuple[str, Dict[int, str]]:
-    """Convert integer labels (ncon-style) to letter labels (einsum-style).
+    """Convert integer labels (ncon_torch-style) to letter labels (einsum-style).
 
     - Positive labels (> 0): contracted/internal indices, typically appearing twice.
     - Negative labels (< 0): free indices, each appears once and define output order
@@ -94,9 +91,9 @@ def ncon_to_einsum(connects: List[List[int]]) -> Tuple[str, Dict[int, str]]:
 
 @torch.inference_mode()
 def run_once_ncon(tensors: List[torch.Tensor], connects: List[List[int]]) -> torch.Tensor:
-    out = ncon(tensors, connects, check_network=True, make_contiguous_output=False)
+    out = ncon_torch(tensors, connects, check_network=True, make_contiguous_output=False)
     if not isinstance(out, torch.Tensor):
-        # If ncon returns a Python scalar, wrap it for comparison convenience.
+        # If ncon_torch returns a Python scalar, wrap it for comparison convenience.
         out = torch.tensor(out, device=tensors[0].device, dtype=tensors[0].dtype)
     return out
 
@@ -229,7 +226,7 @@ def run_device(suites: List[Dict[str, Any]], device: torch.device) -> List[Dict[
                 "name": name,
                 "device": str(device),
                 "ok": False,
-                "note": "Mismatch between ncon and einsum results",
+                "note": "Mismatch between ncon_torch and einsum results",
                 "ncon_ms": float("nan"),
                 "einsum_ms": float("nan"),
                 "speedup_einsum_over_ncon": float("nan"),
@@ -243,7 +240,7 @@ def run_device(suites: List[Dict[str, Any]], device: torch.device) -> List[Dict[
 
         # Pre-bind callables to avoid recreation inside the timed loop.
         def _call_ncon():
-            return ncon(tensors, connects, check_network=False, make_contiguous_output=False)
+            return ncon_torch(tensors, connects, check_network=False, make_contiguous_output=False)
 
         expr, _ = ncon_to_einsum(connects)
 
@@ -271,7 +268,7 @@ def main():
     torch.manual_seed(0)
 
     print("=" * 72)
-    print("ncon vs torch.einsum — Performance & Correctness Benchmark")
+    print("ncon_torch vs torch.einsum — Performance & Correctness Benchmark")
     print("=" * 72)
     print(f"Torch version: {torch.__version__}")
     if torch.cuda.is_available():
@@ -297,10 +294,23 @@ def main():
     # Pretty printer
     def print_block(title: str, rows: List[Dict[str, Any]]):
         print(f"\n{title}")
-        print("-" * 72)
-        header = f"{'Case':26} {'Device':8} {'OK':4} {'ncon (ms)':>10} {'einsum (ms)':>12} {'speedup(ein/ncon)':>18} {'loops':>7}"
+
+        # Adjusted widths to be large enough for the header text.
+        # Using explicit alignment (< for left, > for right) for clarity.
+        header = (f"{'Case':<28}"
+                  f"{'Device':<8}"
+                  f"{'OK':<4}"
+                  f"{'ncon_torch (ms)':>18}"
+                  f"{'einsum (ms)':>14}"
+                  f"{'speedup(ein/ncon_torch)':>27}"
+                  f"{'loops':>7}")
+
+        # Make the divider line dynamically match the header length for robustness.
+        line_len = len(header)
+        print("-" * line_len)
         print(header)
-        print("-" * 72)
+        print("-" * line_len)
+
         for r in rows:
             name = r["name"]
             device = r["device"]
@@ -309,16 +319,29 @@ def main():
             ein_ms = r["einsum_ms"]
             spd = r["speedup_einsum_over_ncon"]
             loops = r.get("loops", 0)
+
             if math.isnan(ncon_ms):
-                ncon_s = "   n/a   "
-                ein_s = "    n/a    "
-                spd_s = "       n/a       "
+                # Also adjust the 'n/a' strings to match the new widths.
+                ncon_s = f"{'n/a':>18}"
+                ein_s = f"{'n/a':>14}"
+                spd_s = f"{'n/a':>27}"
             else:
-                ncon_s = f"{ncon_ms:10.3f}"
-                ein_s = f"{ein_ms:12.3f}"
-                spd_s = f"{spd:18.3f}"
-            print(f"{name:26} {device:8} {ok:4} {ncon_s} {ein_s} {spd_s} {loops:7d}")
-        print("-" * 72)
+                # Adjust the data formatting to match the new header widths.
+                ncon_s = f"{ncon_ms:18.3f}"
+                ein_s = f"{ein_ms:14.3f}"
+                spd_s = f"{spd:27.3f}"
+
+            # The final print statement combines the correctly sized components.
+            # Note: name, device, and ok are formatted here, while the numeric
+            # strings are pre-formatted.
+            print(f"{name:<28}"
+                  f"{device:<8}"
+                  f"{ok:<4}"
+                  f"{ncon_s}"
+                  f"{ein_s}"
+                  f"{spd_s}"
+                  f"{loops:7d}")
+        print("-" * line_len)
 
     print_block("CPU Results", cpu_results)
     if gpu_results:
@@ -336,20 +359,20 @@ def main():
     print("-" * 72)
     cpu_sum = summarize(cpu_results)
     print(f"CPU    | Cases: {cpu_sum['count']:2d} | All-correct: {cpu_sum['ok']:2d} | "
-          f"Avg speedup (einsum/ncon): {cpu_sum['avg_speedup_ein_over_ncon']:.3f}")
+          f"Avg speedup (einsum/ncon_torch): {cpu_sum['avg_speedup_ein_over_ncon']:.3f}")
 
     if gpu_results:
         gpu_sum = summarize(gpu_results)
         print(f"GPU    | Cases: {gpu_sum['count']:2d} | All-correct: {gpu_sum['ok']:2d} | "
-              f"Avg speedup (einsum/ncon): {gpu_sum['avg_speedup_ein_over_ncon']:.3f}")
+              f"Avg speedup (einsum/ncon_torch): {gpu_sum['avg_speedup_ein_over_ncon']:.3f}")
     else:
         print("GPU    | Not available")
 
     print("-" * 72)
     print("Notes:")
-    print("1) Label dimensions are sampled in [8, 64]; results are checked with rtol=1e-4, atol=5e-4.")
+    print("1) Label dimensions are sampled in [32, 128]; results are checked with rtol=1e-4, atol=5e-4.")
     print("2) Iteration counts are increased vs. the previous version to reduce timing noise.")
-    print("3) speedup(einsum/ncon) > 1 means einsum is faster; < 1 means ncon is faster.")
+    print("3) speedup(einsum/ncon_torch) > 1 means einsum is faster; < 1 means ncon_torch is faster.")
     print("=" * 72)
 
 

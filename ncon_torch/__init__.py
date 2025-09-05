@@ -1,3 +1,3 @@
-from .ncon_torch import ncon
+from .ncon_torch import ncon_torch
 
-__all__ = ['ncon']
+__all__ = ['ncon_torch']
